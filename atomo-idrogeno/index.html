@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Esperimento 3D — Atomo di idrogeno</title>
+
+  <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    :root{
+      --bg:#040610;
+      --panel:rgba(8,15,35,.86);
+      --line:rgba(91,196,255,.28);
+      --cyan:#45caff;
+      --gold:#ffb44d;
+      --orange:#ff7b1a;
+      --green:#55ff9d;
+      --red:#ff4b5c;
+      --violet:#9c7cff;
+      --text:#f5fbff;
+      --muted:#a9bed8;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      overflow:hidden;
+      background:radial-gradient(circle at 50% 42%,#151d43 0%,#060915 52%,#02030a 100%);
+      color:var(--text);
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    }
+    #scene{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+
+    .hud{
+      position:fixed;
+      inset:0;
+      display:grid;
+      grid-template-columns:280px 1fr 310px;
+      grid-template-rows:auto 1fr auto;
+      gap:14px;
+      padding:14px;
+      pointer-events:none;
+    }
+    .glass{
+      background:linear-gradient(180deg,rgba(12,24,56,.82),rgba(5,9,22,.64));
+      border:1px solid var(--line);
+      border-radius:22px;
+      box-shadow:0 16px 60px rgba(0,0,0,.42), inset 0 0 28px rgba(69,202,255,.04);
+      backdrop-filter:blur(14px);
+    }
+    .title{
+      grid-column:1/4;
+      justify-self:center;
+      width:min(980px,100%);
+      padding:10px 20px 12px;
+      text-align:center;
+    }
+    .title h1{
+      margin:0;
+      font-size:clamp(1.7rem,3.4vw,3.8rem);
+      line-height:1;
+      letter-spacing:-.045em;
+      text-shadow:0 0 20px rgba(69,202,255,.50);
+    }
+    .title p{margin:6px 0 0;color:var(--muted);font-size:clamp(.82rem,1.1vw,1rem)}
+
+    .legend{grid-column:1;grid-row:2;align-self:start;padding:14px;pointer-events:auto}
+    .legend h2,.controls h2{
+      margin:0 0 10px;
+      font-size:.78rem;
+      letter-spacing:.15em;
+      text-transform:uppercase;
+      color:#dff6ff;
+    }
+    .legend-item{
+      display:grid;
+      grid-template-columns:16px 1fr;
+      gap:9px;
+      align-items:start;
+      padding:8px 0;
+      border-top:1px solid rgba(255,255,255,.06);
+      color:#dcecff;
+      line-height:1.32;
+      font-size:.86rem;
+    }
+    .legend-item:first-of-type{border-top:0}
+    .dot{width:12px;height:12px;border-radius:50%;margin-top:3px;box-shadow:0 0 14px currentColor}
+    .d-red{background:var(--red);color:var(--red)}
+    .d-cyan{background:var(--cyan);color:var(--cyan)}
+    .d-gold{background:var(--gold);color:var(--gold)}
+    .d-violet{background:var(--violet);color:var(--violet)}
+    .d-green{background:var(--green);color:var(--green)}
+
+    .controls{grid-column:3;grid-row:2;align-self:start;padding:14px;pointer-events:auto}
+    .btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+    button{
+      border:0;
+      border-radius:14px;
+      padding:10px 8px;
+      cursor:pointer;
+      color:#fff;
+      font-weight:900;
+      letter-spacing:.01em;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 10px 22px rgba(0,0,0,.22);
+      transition:transform .16s ease, filter .16s ease;
+    }
+    button:hover{transform:translateY(-1px);filter:brightness(1.12)}
+    button:active{transform:translateY(1px) scale(.99)}
+    .start{background:linear-gradient(135deg,#35d878,#167e45)}
+    .stop{background:linear-gradient(135deg,#ff4b5c,#8b1a27)}
+    .toggle{background:linear-gradient(135deg,#3494ff,#1a41b0)}
+    .excite{background:linear-gradient(135deg,#ffa447,#a0490f)}
+    .emit{background:linear-gradient(135deg,#9c7cff,#4a2bb5)}
+    .reset{background:linear-gradient(135deg,#7c8aa5,#30394d)}
+
+    .slider-row{
+      margin-top:9px;
+      padding:10px;
+      border-radius:16px;
+      background:rgba(255,255,255,.045);
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .slider-row label{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:7px;
+      color:#dcecff;
+      font-size:.85rem;
+      font-weight:800;
+    }
+    .slider-row span{color:var(--gold);font-variant-numeric:tabular-nums}
+    input[type="range"]{width:100%;accent-color:var(--cyan)}
+
+    .lesson{
+      grid-column:1/4;
+      grid-row:3;
+      justify-self:center;
+      width:min(1080px,100%);
+      padding:14px 18px;
+      pointer-events:auto;
+      border-color:rgba(255,180,77,.32);
+      display:grid;
+      grid-template-columns:170px 1fr;
+      gap:16px;
+      align-items:center;
+    }
+    .phase{border-right:1px solid rgba(255,255,255,.10);padding-right:14px}
+    .phase .step{color:var(--gold);letter-spacing:.18em;text-transform:uppercase;font-size:.72rem;font-weight:950;margin-bottom:5px}
+    .phase .mini{color:#dff6ff;font-size:.88rem;line-height:1.25;font-weight:800}
+    .lesson h2{margin:0 0 5px;font-size:clamp(1.1rem,1.7vw,1.55rem);letter-spacing:-.03em}
+    .lesson p{margin:0;color:#d9e7f4;font-size:clamp(.86rem,1.1vw,1rem);line-height:1.42}
+    .lesson em{font-style:normal;color:var(--cyan);font-weight:900}
+    .lesson strong{color:white}
+
+    .label3d{
+      position:absolute;
+      transform:translate(-50%,-50%);
+      padding:5px 8px;
+      border-radius:999px;
+      color:white;
+      background:rgba(3,8,18,.68);
+      border:1px solid rgba(255,255,255,.16);
+      font-weight:900;
+      font-size:.72rem;
+      white-space:nowrap;
+      text-shadow:0 1px 4px #000;
+      pointer-events:none;
+      backdrop-filter:blur(8px);
+      opacity:.92;
+    }
+    .redLabel{border-color:rgba(255,75,92,.42);box-shadow:0 0 18px rgba(255,75,92,.18)}
+    .goldLabel{border-color:rgba(255,180,77,.42);box-shadow:0 0 18px rgba(255,180,77,.18)}
+    .blueLabel{border-color:rgba(69,202,255,.40);box-shadow:0 0 18px rgba(69,202,255,.14)}
+    .violetLabel{border-color:rgba(156,124,255,.42);box-shadow:0 0 18px rgba(156,124,255,.18)}
+
+    .toast{
+      grid-column:2;
+      grid-row:2;
+      justify-self:center;
+      align-self:start;
+      margin-top:8px;
+      opacity:0;
+      transform:translateY(-8px);
+      transition:.3s ease;
+      padding:10px 14px;
+      border-radius:999px;
+      background:rgba(0,0,0,.58);
+      border:1px solid rgba(255,180,77,.25);
+      color:#fff4dd;
+      font-weight:900;
+      pointer-events:none;
+      text-align:center;
+    }
+    .toast.show{opacity:1;transform:translateY(0)}
+
+    @media (max-height:760px), (max-width:1080px){
+      .hud{grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr auto auto;padding:10px;gap:10px}
+      .title{grid-column:1/3;padding:8px 14px}
+      .title p{display:none}
+      .legend{display:none}
+      .controls{grid-column:1/3;grid-row:4;width:100%;justify-self:center;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:10px}
+      .controls h2{display:none}
+      .btn-grid{grid-column:1;grid-row:1;grid-template-columns:repeat(3,1fr);margin:0}
+      .slider-row{margin:0;padding:8px}
+      .lesson{grid-column:1/3;grid-row:3;width:100%;grid-template-columns:120px 1fr;padding:10px 12px}
+      .lesson h2{font-size:1.05rem}
+      .lesson p{font-size:.84rem;line-height:1.32}
+      .phase .mini{font-size:.78rem}
+      .label3d{display:none!important}
+      .toast{grid-column:1/3;grid-row:2}
+    }
+    @media (max-width:700px){
+      .controls{grid-template-columns:1fr}
+      .btn-grid{grid-column:1;grid-template-columns:repeat(2,1fr)}
+      .slider-row{display:none}
+      .lesson{grid-template-columns:1fr;gap:6px}
+      .phase{border-right:0;border-bottom:1px solid rgba(255,255,255,.10);padding:0 0 7px}
+      .lesson p{display:none}
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <main class="hud">
+    <section class="title glass">
+      <h1>Atomo di idrogeno</h1>
+      <p>Un protone al centro, un elettrone attorno: non una pallina su un binario, ma una nube di probabilità.</p>
+    </section>
+
+    <aside class="legend glass">
+      <h2>Legenda</h2>
+      <div class="legend-item"><span class="dot d-red"></span><span><strong>Protone</strong>: nucleo positivo dell’idrogeno.</span></div>
+      <div class="legend-item"><span class="dot d-cyan"></span><span><strong>Elettrone</strong>: particella negativa associata all’atomo.</span></div>
+      <div class="legend-item"><span class="dot d-violet"></span><span><strong>Nube</strong>: zona dove è più probabile trovare l’elettrone.</span></div>
+      <div class="legend-item"><span class="dot d-gold"></span><span><strong>Fotone</strong>: energia assorbita o emessa nei salti energetici.</span></div>
+      <div class="legend-item"><span class="dot d-green"></span><span><strong>Livello</strong>: distanza/energia maggiore quando l’atomo è eccitato.</span></div>
+    </aside>
+
+    <aside class="controls glass">
+      <h2>Comandi</h2>
+      <div class="btn-grid">
+        <button class="start" id="startBtn">▶ Avvia</button>
+        <button class="stop" id="stopBtn">■ Ferma</button>
+        <button class="toggle" id="modelBtn">☁ Nube</button>
+        <button class="excite" id="exciteBtn">⚡ Eccita</button>
+        <button class="emit" id="emitBtn">✦ Emetti</button>
+        <button class="reset" id="resetBtn">↺ Reset</button>
+      </div>
+      <div class="slider-row">
+        <label for="level">Livello energetico <span id="levelOut">n = 1</span></label>
+        <input id="level" type="range" min="1" max="4" step="1" value="1" />
+      </div>
+      <div class="slider-row">
+        <label for="speed">Velocità visuale <span id="speedOut">1.0×</span></label>
+        <input id="speed" type="range" min="0.2" max="2.5" step="0.1" value="1" />
+      </div>
+      <div class="slider-row">
+        <label for="cameraMode">Camera <span id="cameraOut">attiva</span></label>
+        <input id="cameraMode" type="range" min="0" max="1" step="1" value="1" />
+      </div>
+    </aside>
+
+    <section class="lesson glass">
+      <div class="phase">
+        <div class="step" id="lessonStep">Fase 0</div>
+        <div class="mini" id="lessonMini">Atomo fondamentale</div>
+      </div>
+      <div>
+        <h2 id="lessonTitle">Il modello comodo non è il modello vero</h2>
+        <p id="lessonText">L’idrogeno ha un nucleo con un solo protone e un elettrone associato. L’orbita circolare è utile per iniziare, ma è una semplificazione: il modello più corretto è una nube di probabilità.</p>
+      </div>
+    </section>
+
+    <div class="toast" id="toast">Messaggio</div>
+  </main>
+
+  <div class="label3d redLabel" id="labelProton">Protone</div>
+  <div class="label3d blueLabel" id="labelElectron">Elettrone</div>
+  <div class="label3d violetLabel" id="labelCloud">Nube di probabilità</div>
+  <div class="label3d goldLabel" id="labelPhoton">Fotone</div>
+  <div class="label3d blueLabel" id="labelOrbit">Livello energetico</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    const canvas = document.getElementById('scene');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050712, .047);
+
+    const camera = new THREE.PerspectiveCamera(48, innerWidth/innerHeight, .1, 200);
+    camera.position.set(0, 4.8, 12.5);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = .07;
+    controls.enablePan = false;
+    controls.minDistance = 6.5;
+    controls.maxDistance = 20;
+    controls.maxPolarAngle = Math.PI * .76;
+    controls.target.set(0, .15, 0);
+
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .78, .52, .12);
+    composer.addPass(bloom);
+
+    const state = {
+      running:true,
+      quantum:true,
+      level:1,
+      targetLevel:1,
+      speed:1,
+      autoCamera:true,
+      time:0,
+      photonMode:'none',
+      photonT:0
+    };
+
+    const levels = {
+      1:{ r:1.45, color:0x45caff, energy:'−13,6 eV' },
+      2:{ r:2.45, color:0x55ff9d, energy:'−3,4 eV' },
+      3:{ r:3.45, color:0xffb44d, energy:'−1,5 eV' },
+      4:{ r:4.35, color:0xff7bff, energy:'−0,85 eV' }
+    };
+
+    function std(color, metal=.3, rough=.32, emissive=0x000000, intensity=0){
+      return new THREE.MeshStandardMaterial({ color, metalness:metal, roughness:rough, emissive, emissiveIntensity:intensity });
+    }
+    function basic(color, opacity=1){
+      return new THREE.MeshBasicMaterial({ color, transparent:true, opacity, blending:THREE.AdditiveBlending, depthWrite:false });
+    }
+
+    scene.add(new THREE.HemisphereLight(0x8bcaff, 0x05030a, 1.1));
+    const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(4,8,6); scene.add(key);
+    const blueLight = new THREE.PointLight(0x45caff, 2.8, 18); blueLight.position.set(-4, 3, 5); scene.add(blueLight);
+    const goldLight = new THREE.PointLight(0xffb44d, 2.1, 18); goldLight.position.set(4, 2.8, 4); scene.add(goldLight);
+
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(16,128), new THREE.MeshStandardMaterial({ color:0x091124, metalness:.55, roughness:.23 }));
+    floor.rotation.x = -Math.PI/2; floor.position.y = -2.2; scene.add(floor);
+    const grid = new THREE.GridHelper(26, 36, 0x1d74ff, 0x19335f); grid.position.y=-2.18; grid.material.transparent=true; grid.material.opacity=.18; scene.add(grid);
+
+    const atomGroup = new THREE.Group();
+    const orbitGroup = new THREE.Group();
+    const cloudGroup = new THREE.Group();
+    const photonGroup = new THREE.Group();
+    const starsGroup = new THREE.Group();
+    scene.add(atomGroup, orbitGroup, cloudGroup, photonGroup, starsGroup);
+
+    // Sfondo particellare discreto
+    const starGeo = new THREE.BufferGeometry();
+    const starPositions=[];
+    for(let i=0;i<350;i++){
+      const r = 12 + Math.random()*32;
+      const a = Math.random()*Math.PI*2;
+      const y = -2 + Math.random()*14;
+      starPositions.push(Math.cos(a)*r, y, Math.sin(a)*r);
+    }
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions,3));
+    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color:0x7ccfff, size:.035, transparent:true, opacity:.35 }));
+    starsGroup.add(stars);
+
+    // Nucleo: idrogeno = un protone, niente neutroni
+    const protonMat = std(0xff4b5c, .2, .18, 0xff263b, 1.05);
+    const proton = new THREE.Mesh(new THREE.SphereGeometry(.42, 64, 32), protonMat);
+    atomGroup.add(proton);
+
+    const protonHalo = new THREE.Mesh(new THREE.SphereGeometry(.75,64,32), basic(0xff4b5c,.12));
+    atomGroup.add(protonHalo);
+
+    // Piccoli simboli + sul nucleo
+    function makeTextSprite(txt,color='#fff',size=96){
+      const c=document.createElement('canvas'); c.width=512; c.height=256; const ctx=c.getContext('2d');
+      ctx.font=`900 ${size}px Arial`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle=color; ctx.shadowColor=color; ctx.shadowBlur=18; ctx.fillText(txt,256,128);
+      const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
+      const sp=new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true })); sp.scale.set(.55,.275,1); return sp;
+    }
+    const plus = makeTextSprite('+','#fff',120); plus.position.set(.02,.02,.45); atomGroup.add(plus);
+
+    // Elettrone
+    const electronMat = std(0x45caff,.15,.16,0x128bff,1.45);
+    const electron = new THREE.Mesh(new THREE.SphereGeometry(.16,32,20), electronMat);
+    atomGroup.add(electron);
+    electron.add(new THREE.Mesh(new THREE.SphereGeometry(.30,32,16), basic(0x45caff,.14)));
+
+    const minus = makeTextSprite('−','#ffffff',120); minus.scale.set(.32,.16,1); electron.add(minus); minus.position.set(0,0,.19);
+
+    // Orbite semplificate di Bohr
+    const orbitLines = [];
+    for(let n=1;n<=4;n++){
+      const r = levels[n].r;
+      const tor1 = new THREE.Mesh(new THREE.TorusGeometry(r, .012, 10, 180), basic(levels[n].color, n===1?.58:.22));
+      tor1.rotation.x = Math.PI/2;
+      tor1.userData.level = n;
+      orbitGroup.add(tor1); orbitLines.push(tor1);
+
+      const tor2 = new THREE.Mesh(new THREE.TorusGeometry(r, .008, 8, 180), basic(levels[n].color, n===1?.26:.10));
+      tor2.rotation.x = Math.PI/2; tor2.rotation.y = Math.PI/2.8;
+      tor2.userData.level = n;
+      orbitGroup.add(tor2); orbitLines.push(tor2);
+    }
+
+    // Nube quantistica: punti distribuiti a probabilità, aggiornata per livello
+    const cloudCount = 2200;
+    const cloudGeo = new THREE.BufferGeometry();
+    const cloudPositions = new Float32Array(cloudCount*3);
+    const cloudColors = new Float32Array(cloudCount*3);
+    const cloudBase = [];
+    const color = new THREE.Color();
+
+    function gaussian(){
+      let u=0,v=0;
+      while(u===0)u=Math.random(); while(v===0)v=Math.random();
+      return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+    }
+
+    function rebuildCloud(level=1){
+      cloudBase.length = 0;
+      const baseR = levels[level].r;
+      for(let i=0;i<cloudCount;i++){
+        let x,y,z;
+        if(level===1){
+          const radius = Math.abs(gaussian())*.52 + Math.random()*baseR*.52;
+          const theta = Math.random()*Math.PI*2;
+          const phi = Math.acos(2*Math.random()-1);
+          x=radius*Math.sin(phi)*Math.cos(theta);
+          y=radius*Math.cos(phi);
+          z=radius*Math.sin(phi)*Math.sin(theta);
+        } else if(level===2){
+          const radius = baseR*.30 + Math.abs(gaussian())*.45 + Math.random()*baseR*.38;
+          const theta = Math.random()*Math.PI*2;
+          const sign = Math.random()<.5?-1:1;
+          const lobe = sign*(.55+Math.random()*1.2);
+          x=Math.cos(theta)*radius*.42;
+          y=lobe + gaussian()*.18;
+          z=Math.sin(theta)*radius*.42;
+        } else {
+          const radius = baseR*.35 + Math.abs(gaussian())*.55 + Math.random()*baseR*.42;
+          const theta = Math.random()*Math.PI*2;
+          const phi = Math.acos(2*Math.random()-1);
+          x=radius*Math.sin(phi)*Math.cos(theta);
+          y=radius*Math.cos(phi)*.85 + Math.sin(theta*2)*.18;
+          z=radius*Math.sin(phi)*Math.sin(theta);
+        }
+        cloudBase.push({x,y,z,phase:Math.random()*Math.PI*2,amp:.03+Math.random()*.08});
+        cloudPositions[i*3]=x; cloudPositions[i*3+1]=y; cloudPositions[i*3+2]=z;
+        const c = level===1 ? 0x45caff : level===2 ? 0x9c7cff : level===3 ? 0xffb44d : 0xff7bff;
+        color.setHex(c);
+        cloudColors[i*3]=color.r; cloudColors[i*3+1]=color.g; cloudColors[i*3+2]=color.b;
+      }
+      cloudGeo.setAttribute('position', new THREE.BufferAttribute(cloudPositions,3));
+      cloudGeo.setAttribute('color', new THREE.BufferAttribute(cloudColors,3));
+      cloudGeo.attributes.position.needsUpdate=true;
+      cloudGeo.attributes.color.needsUpdate=true;
+    }
+    rebuildCloud(1);
+
+    const cloudMat = new THREE.PointsMaterial({
+      size:.035,
+      vertexColors:true,
+      transparent:true,
+      opacity:.50,
+      blending:THREE.AdditiveBlending,
+      depthWrite:false
+    });
+    const cloud = new THREE.Points(cloudGeo, cloudMat);
+    cloudGroup.add(cloud);
+
+    // Fotone come scia ondulata
+    const photonMat = basic(0xffb44d,.0);
+    const photonLineGeo = new THREE.BufferGeometry();
+    const photonPts = new Float32Array(90*3);
+    photonLineGeo.setAttribute('position', new THREE.BufferAttribute(photonPts,3));
+    const photonLine = new THREE.Line(photonLineGeo, new THREE.LineBasicMaterial({ color:0xffb44d, transparent:true, opacity:0, blending:THREE.AdditiveBlending }));
+    photonGroup.add(photonLine);
+    const photonBall = new THREE.Mesh(new THREE.SphereGeometry(.11,24,16), basic(0xffb44d,0));
+    photonGroup.add(photonBall);
+
+    // UI
+    const lessonStep=document.getElementById('lessonStep');
+    const lessonMini=document.getElementById('lessonMini');
+    const lessonTitle=document.getElementById('lessonTitle');
+    const lessonText=document.getElementById('lessonText');
+    const level=document.getElementById('level');
+    const levelOut=document.getElementById('levelOut');
+    const speed=document.getElementById('speed');
+    const speedOut=document.getElementById('speedOut');
+    const cameraMode=document.getElementById('cameraMode');
+    const cameraOut=document.getElementById('cameraOut');
+    const toast=document.getElementById('toast');
+    let toastTimer=null;
+
+    function showToast(t){
+      toast.textContent=t;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer=setTimeout(()=>toast.classList.remove('show'),1500);
+    }
+    function setLesson(step,mini,title,html){
+      lessonStep.textContent=step; lessonMini.textContent=mini; lessonTitle.textContent=title; lessonText.innerHTML=html;
+    }
+    function refreshLesson(){
+      if(!state.running){
+        setLesson('Fase 0','Atomo fermo','La scena è ferma, non l’atomo reale','Hai fermato l’animazione. Nella realtà l’elettrone non è una biglia che smette di muoversi: qui blocchiamo solo la rappresentazione per osservare meglio.');
+        return;
+      }
+      if(state.photonMode==='absorb'){
+        setLesson('Fase 2','Assorbimento','Un fotone dà energia all’atomo','Quando l’atomo assorbe energia, l’elettrone può passare a un livello più alto. Non sale come un ascensore: cambia stato energetico.');
+        return;
+      }
+      if(state.photonMode==='emit'){
+        setLesson('Fase 3','Emissione','L’atomo restituisce energia come luce','Quando l’elettrone torna a un livello più basso, l’atomo emette un fotone. È una piccola firma luminosa: ogni salto corrisponde a una energia precisa.');
+        return;
+      }
+      if(state.quantum){
+        setLesson('Fase 1','Modello quantistico','Non orbita: probabilità','La nube mostra dove è più probabile trovare l’elettrone. Questa è l’immagine più onesta: <em>non sappiamo una traiettoria precisa</em>, conosciamo una distribuzione di probabilità.');
+      }else{
+        setLesson('Fase 1','Modello di Bohr','Un binario utile, ma provvisorio','L’orbita circolare aiuta a visualizzare i livelli energetici, ma non è il modello più corretto. È una scala didattica: serve per salire, poi va superata.');
+      }
+    }
+
+    function setLevel(n, announce=true){
+      state.level = n;
+      level.value = n;
+      levelOut.textContent = `n = ${n}`;
+      rebuildCloud(n);
+      orbitLines.forEach(o=>{
+        const active = o.userData.level===n;
+        o.material.opacity = active ? .62 : .16;
+        o.scale.setScalar(active ? 1.02 : 1);
+      });
+      if(announce) showToast(`Livello energetico: n = ${n}`);
+      refreshLesson();
+    }
+
+    document.getElementById('startBtn').onclick=()=>{state.running=true;refreshLesson();showToast('Animazione avviata')};
+    document.getElementById('stopBtn').onclick=()=>{state.running=false;refreshLesson();showToast('Animazione fermata')};
+    document.getElementById('modelBtn').onclick=()=>{
+      state.quantum=!state.quantum;
+      document.getElementById('modelBtn').textContent = state.quantum ? '☁ Nube' : '◎ Bohr';
+      refreshLesson();
+      showToast(state.quantum?'Modello quantistico: nube':'Modello semplificato: orbite');
+    };
+    document.getElementById('exciteBtn').onclick=()=>{
+      const next = Math.min(4, state.level+1);
+      if(next===state.level){showToast('Già al livello massimo visualizzato');return}
+      state.photonMode='absorb'; state.photonT=0; state.targetLevel=next;
+      refreshLesson(); showToast('Fotone assorbito: salto verso un livello più alto');
+    };
+    document.getElementById('emitBtn').onclick=()=>{
+      const next = Math.max(1, state.level-1);
+      if(next===state.level){showToast('Già allo stato fondamentale');return}
+      state.photonMode='emit'; state.photonT=0; state.targetLevel=next;
+      refreshLesson(); showToast('Fotone emesso: ritorno verso il basso');
+    };
+    document.getElementById('resetBtn').onclick=()=>{state.photonMode='none';state.photonT=0;setLevel(1,false);state.quantum=true;document.getElementById('modelBtn').textContent='☁ Nube';refreshLesson();showToast('Reset: stato fondamentale')};
+    level.oninput=()=>setLevel(Number(level.value));
+    speed.oninput=()=>{state.speed=Number(speed.value);speedOut.textContent=state.speed.toFixed(1)+'×'};
+    cameraMode.oninput=()=>{state.autoCamera=Number(cameraMode.value)===1;cameraOut.textContent=state.autoCamera?'attiva':'manuale';showToast(state.autoCamera?'Camera automatica':'Camera manuale')};
+
+    // Labels HTML, nascoste su schermi piccoli
+    const labels=[
+      ['labelProton',new THREE.Vector3(0,.75,0)],
+      ['labelElectron',new THREE.Vector3(2.0,.2,0)],
+      ['labelCloud',new THREE.Vector3(-2.4,1.8,0)],
+      ['labelPhoton',new THREE.Vector3(3.2,2.2,0)],
+      ['labelOrbit',new THREE.Vector3(0,-1.6,2.3)]
+    ];
+    function projectLabels(){
+      for(const [id,pos] of labels){
+        const el=document.getElementById(id);
+        const v=pos.clone().project(camera);
+        el.style.left=((v.x*.5+.5)*innerWidth)+'px';
+        el.style.top=((-v.y*.5+.5)*innerHeight)+'px';
+        el.style.display=(v.z<1&&v.z>-1&&innerWidth>1080&&innerHeight>760)?'block':'none';
+      }
+    }
+
+    const clock = new THREE.Clock();
+
+    function updatePhoton(dt){
+      if(state.photonMode==='none'){
+        photonLine.material.opacity = 0;
+        photonBall.material.opacity = 0;
+        return;
+      }
+      state.photonT += dt * .72 * state.speed;
+      const t = Math.min(state.photonT, 1);
+      const incoming = state.photonMode==='absorb';
+      const start = incoming ? new THREE.Vector3(-6.2,2.5,0) : new THREE.Vector3(0,0,0);
+      const end = incoming ? new THREE.Vector3(0,0,0) : new THREE.Vector3(6.2,2.5,0);
+      const dir = new THREE.Vector3().subVectors(end,start);
+      const base = new THREE.Vector3().lerpVectors(start,end,t);
+      photonBall.position.copy(base);
+      photonBall.material.opacity = .95 * (1-Math.abs(t-.5)*.35);
+
+      const pos = photonLine.geometry.attributes.position.array;
+      for(let i=0;i<90;i++){
+        const k=i/89;
+        const localT=Math.max(0,Math.min(1,t-k*.12));
+        const p=new THREE.Vector3().lerpVectors(start,end,localT);
+        p.y += Math.sin(k*Math.PI*8 + state.time*8) * .12;
+        p.z += Math.cos(k*Math.PI*8 + state.time*8) * .12;
+        pos[i*3]=p.x; pos[i*3+1]=p.y; pos[i*3+2]=p.z;
+      }
+      photonLine.geometry.attributes.position.needsUpdate=true;
+      photonLine.material.opacity=.75*(1-Math.abs(t-.5)*.4);
+
+      if(t>=1){
+        setLevel(state.targetLevel,false);
+        state.photonMode='none';
+        state.photonT=0;
+        refreshLesson();
+      }
+    }
+
+    function animate(){
+      requestAnimationFrame(animate);
+      const dt=Math.min(clock.getDelta(),.033);
+      if(state.running) state.time += dt * state.speed;
+
+      if(state.autoCamera){
+        const a=state.time*.10;
+        camera.position.x += (Math.sin(a)*10.8 - camera.position.x)*.014;
+        camera.position.z += (Math.cos(a)*10.8 - camera.position.z)*.014;
+        camera.position.y += (4.6 + Math.sin(a*1.6)*.32 - camera.position.y)*.014;
+      }
+      controls.update();
+
+      const n = state.level;
+      const r = levels[n].r;
+      const angle = state.time * (1.35 / Math.sqrt(n)) + n*.4;
+
+      // Elettrone: nella modalità Bohr si vede come particella su traiettoria; nella modalità nube diventa un indicatore più discreto.
+      electron.position.set(Math.cos(angle)*r, Math.sin(angle*.7)*.25, Math.sin(angle)*r);
+      electron.visible = !state.quantum || state.photonMode !== 'none';
+      electron.material.emissiveIntensity = state.quantum ? .55 : 1.45;
+      electron.scale.setScalar(state.quantum ? .72 : 1 + Math.sin(state.time*6)*.035);
+
+      // Nube quantistica
+      cloud.visible = state.quantum;
+      cloudMat.opacity = state.quantum ? .46 : .10;
+      const pos = cloud.geometry.attributes.position.array;
+      for(let i=0;i<cloudCount;i++){
+        const b=cloudBase[i];
+        const breathe = Math.sin(state.time*1.2 + b.phase)*b.amp;
+        pos[i*3]=b.x*(1+breathe);
+        pos[i*3+1]=b.y*(1+breathe*.8);
+        pos[i*3+2]=b.z*(1+breathe);
+      }
+      cloud.geometry.attributes.position.needsUpdate=true;
+      cloud.rotation.y += dt * .05 * state.speed;
+      cloud.rotation.x = Math.sin(state.time*.22)*.08;
+
+      // Orbite e livelli
+      orbitLines.forEach(o=>{
+        const active = o.userData.level===n;
+        o.visible = true;
+        o.material.opacity = state.quantum ? (active ? .22 : .07) : (active ? .72 : .18);
+        o.rotation.z += dt * .02 * (active ? 1 : .3);
+      });
+
+      // Nucleo pulsante
+      proton.scale.setScalar(1 + Math.sin(state.time*2.5)*.025);
+      protonHalo.scale.setScalar(1.0 + Math.sin(state.time*2.2)*.08);
+      protonHalo.material.opacity = .10 + Math.sin(state.time*2.2)*.025;
+
+      updatePhoton(dt);
+
+      // Luci e bloom
+      blueLight.intensity = 2.4 + Math.sin(state.time*1.4)*.4;
+      goldLight.intensity = 1.8 + (state.photonMode==='none'?0:1.7);
+      bloom.strength = .60 + (state.photonMode==='none'?0:.55) + (state.quantum?.08:0);
+
+      stars.rotation.y += dt*.006;
+      atomGroup.rotation.y += dt*.018;
+      orbitGroup.rotation.y += dt*.006;
+
+      projectLabels();
+      composer.render();
+    }
+
+    addEventListener('resize',()=>{
+      camera.aspect=innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth,innerHeight);
+      composer.setSize(innerWidth,innerHeight);
+      bloom.setSize(innerWidth,innerHeight);
+      projectLabels();
+    });
+
+    setLevel(1,false);
+    refreshLesson();
+    animate();
+  </script>
+</body>
+</html>
