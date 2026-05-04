@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Esperimento 3D — La gravità secondo Einstein</title>
+
+  <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    :root{
+      --panel:rgba(8,15,35,.86);
+      --line:rgba(91,196,255,.28);
+      --cyan:#45caff;
+      --gold:#ffb44d;
+      --orange:#ff7b1a;
+      --green:#55ff9d;
+      --red:#ff4b5c;
+      --violet:#9c7cff;
+      --text:#f5fbff;
+      --muted:#a9bed8;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      overflow:hidden;
+      background:radial-gradient(circle at 50% 42%,#151d43 0%,#060915 52%,#02030a 100%);
+      color:var(--text);
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    }
+    #scene{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+
+    .hud{
+      position:fixed;
+      inset:0;
+      display:grid;
+      grid-template-columns:280px 1fr 310px;
+      grid-template-rows:auto 1fr auto;
+      gap:14px;
+      padding:14px;
+      pointer-events:none;
+    }
+    .glass{
+      background:linear-gradient(180deg,rgba(12,24,56,.82),rgba(5,9,22,.64));
+      border:1px solid var(--line);
+      border-radius:22px;
+      box-shadow:0 16px 60px rgba(0,0,0,.42), inset 0 0 28px rgba(69,202,255,.04);
+      backdrop-filter:blur(14px);
+    }
+    .title{
+      grid-column:1/4;
+      justify-self:center;
+      width:min(1040px,100%);
+      padding:10px 20px 12px;
+      text-align:center;
+    }
+    .title h1{
+      margin:0;
+      font-size:clamp(1.65rem,3.25vw,3.7rem);
+      line-height:1;
+      letter-spacing:-.045em;
+      text-shadow:0 0 20px rgba(69,202,255,.50);
+    }
+    .title p{margin:6px 0 0;color:var(--muted);font-size:clamp(.82rem,1.1vw,1rem)}
+
+    .legend{grid-column:1;grid-row:2;align-self:start;padding:14px;pointer-events:auto}
+    .legend h2,.controls h2{
+      margin:0 0 10px;
+      font-size:.78rem;
+      letter-spacing:.15em;
+      text-transform:uppercase;
+      color:#dff6ff;
+    }
+    .legend-item{
+      display:grid;
+      grid-template-columns:16px 1fr;
+      gap:9px;
+      align-items:start;
+      padding:8px 0;
+      border-top:1px solid rgba(255,255,255,.06);
+      color:#dcecff;
+      line-height:1.32;
+      font-size:.86rem;
+    }
+    .legend-item:first-of-type{border-top:0}
+    .dot{width:12px;height:12px;border-radius:50%;margin-top:3px;box-shadow:0 0 14px currentColor}
+    .d-gold{background:var(--gold);color:var(--gold)}
+    .d-cyan{background:var(--cyan);color:var(--cyan)}
+    .d-violet{background:var(--violet);color:var(--violet)}
+    .d-green{background:var(--green);color:var(--green)}
+    .d-orange{background:var(--orange);color:var(--orange)}
+
+    .controls{grid-column:3;grid-row:2;align-self:start;padding:14px;pointer-events:auto}
+    .btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+    button{
+      border:0;
+      border-radius:14px;
+      padding:10px 8px;
+      cursor:pointer;
+      color:#fff;
+      font-weight:900;
+      letter-spacing:.01em;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 10px 22px rgba(0,0,0,.22);
+      transition:transform .16s ease, filter .16s ease;
+    }
+    button:hover{transform:translateY(-1px);filter:brightness(1.12)}
+    button:active{transform:translateY(1px) scale(.99)}
+    .start{background:linear-gradient(135deg,#35d878,#167e45)}
+    .stop{background:linear-gradient(135deg,#ff4b5c,#8b1a27)}
+    .gridbtn{background:linear-gradient(135deg,#3494ff,#1a41b0)}
+    .raybtn{background:linear-gradient(135deg,#ffa447,#a0490f)}
+    .newton{background:linear-gradient(135deg,#9c7cff,#4a2bb5)}
+    .reset{background:linear-gradient(135deg,#7c8aa5,#30394d)}
+
+    .slider-row{
+      margin-top:9px;
+      padding:10px;
+      border-radius:16px;
+      background:rgba(255,255,255,.045);
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .slider-row label{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:7px;
+      color:#dcecff;
+      font-size:.85rem;
+      font-weight:800;
+    }
+    .slider-row span{color:var(--gold);font-variant-numeric:tabular-nums}
+    input[type="range"]{width:100%;accent-color:var(--cyan)}
+
+    .lesson{
+      grid-column:1/4;
+      grid-row:3;
+      justify-self:center;
+      width:min(1080px,100%);
+      padding:14px 18px;
+      pointer-events:auto;
+      border-color:rgba(255,180,77,.32);
+      display:grid;
+      grid-template-columns:170px 1fr;
+      gap:16px;
+      align-items:center;
+    }
+    .phase{border-right:1px solid rgba(255,255,255,.10);padding-right:14px}
+    .phase .step{color:var(--gold);letter-spacing:.18em;text-transform:uppercase;font-size:.72rem;font-weight:950;margin-bottom:5px}
+    .phase .mini{color:#dff6ff;font-size:.88rem;line-height:1.25;font-weight:800}
+    .lesson h2{margin:0 0 5px;font-size:clamp(1.1rem,1.7vw,1.55rem);letter-spacing:-.03em}
+    .lesson p{margin:0;color:#d9e7f4;font-size:clamp(.86rem,1.1vw,1rem);line-height:1.42}
+    .lesson em{font-style:normal;color:var(--cyan);font-weight:900}
+    .lesson strong{color:white}
+
+    .label3d{
+      position:absolute;
+      transform:translate(-50%,-50%);
+      padding:5px 8px;
+      border-radius:999px;
+      color:white;
+      background:rgba(3,8,18,.68);
+      border:1px solid rgba(255,255,255,.16);
+      font-weight:900;
+      font-size:.72rem;
+      white-space:nowrap;
+      text-shadow:0 1px 4px #000;
+      pointer-events:none;
+      backdrop-filter:blur(8px);
+      opacity:.92;
+    }
+    .goldLabel{border-color:rgba(255,180,77,.42);box-shadow:0 0 18px rgba(255,180,77,.18)}
+    .blueLabel{border-color:rgba(69,202,255,.40);box-shadow:0 0 18px rgba(69,202,255,.14)}
+    .violetLabel{border-color:rgba(156,124,255,.42);box-shadow:0 0 18px rgba(156,124,255,.18)}
+    .greenLabel{border-color:rgba(85,255,157,.42);box-shadow:0 0 18px rgba(85,255,157,.18)}
+
+    .toast{
+      grid-column:2;
+      grid-row:2;
+      justify-self:center;
+      align-self:start;
+      margin-top:8px;
+      opacity:0;
+      transform:translateY(-8px);
+      transition:.3s ease;
+      padding:10px 14px;
+      border-radius:999px;
+      background:rgba(0,0,0,.58);
+      border:1px solid rgba(255,180,77,.25);
+      color:#fff4dd;
+      font-weight:900;
+      pointer-events:none;
+      text-align:center;
+    }
+    .toast.show{opacity:1;transform:translateY(0)}
+
+    @media (max-height:760px), (max-width:1080px){
+      .hud{grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr auto auto;padding:10px;gap:10px}
+      .title{grid-column:1/3;padding:8px 14px}
+      .title p{display:none}
+      .legend{display:none}
+      .controls{grid-column:1/3;grid-row:4;width:100%;justify-self:center;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:10px}
+      .controls h2{display:none}
+      .btn-grid{grid-column:1;grid-row:1;grid-template-columns:repeat(3,1fr);margin:0}
+      .slider-row{margin:0;padding:8px}
+      .lesson{grid-column:1/3;grid-row:3;width:100%;grid-template-columns:120px 1fr;padding:10px 12px}
+      .lesson h2{font-size:1.05rem}
+      .lesson p{font-size:.84rem;line-height:1.32}
+      .phase .mini{font-size:.78rem}
+      .label3d{display:none!important}
+      .toast{grid-column:1/3;grid-row:2}
+    }
+    @media (max-width:700px){
+      .controls{grid-template-columns:1fr}
+      .btn-grid{grid-column:1;grid-template-columns:repeat(2,1fr)}
+      .slider-row{display:none}
+      .lesson{grid-template-columns:1fr;gap:6px}
+      .phase{border-right:0;border-bottom:1px solid rgba(255,255,255,.10);padding:0 0 7px}
+      .lesson p{display:none}
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <main class="hud">
+    <section class="title glass">
+      <h1>La gravità secondo Einstein</h1>
+      <p>Non una forza invisibile che tira da lontano, ma la curvatura dello spazio-tempo guidata dalla massa.</p>
+    </section>
+
+    <aside class="legend glass">
+      <h2>Legenda</h2>
+      <div class="legend-item"><span class="dot d-gold"></span><span><strong>Massa</strong>: curva lo spazio-tempo attorno a sé.</span></div>
+      <div class="legend-item"><span class="dot d-cyan"></span><span><strong>Griglia</strong>: rappresenta lo spazio-tempo deformato.</span></div>
+      <div class="legend-item"><span class="dot d-green"></span><span><strong>Pianeta</strong>: segue una geodetica, cioè la via più naturale nello spazio curvo.</span></div>
+      <div class="legend-item"><span class="dot d-orange"></span><span><strong>Luce</strong>: si piega passando vicino a una grande massa.</span></div>
+      <div class="legend-item"><span class="dot d-violet"></span><span><strong>Newton</strong>: modello utile, ma qui viene superato visivamente.</span></div>
+    </aside>
+
+    <aside class="controls glass">
+      <h2>Comandi</h2>
+      <div class="btn-grid">
+        <button class="start" id="startBtn">▶ Avvia</button>
+        <button class="stop" id="stopBtn">■ Ferma</button>
+        <button class="gridbtn" id="gridBtn">▦ Griglia</button>
+        <button class="raybtn" id="lightBtn">☄ Luce</button>
+        <button class="newton" id="modeBtn">◎ Einstein</button>
+        <button class="reset" id="resetBtn">↺ Reset</button>
+      </div>
+      <div class="slider-row">
+        <label for="mass">Massa centrale <span id="massOut">6.0</span></label>
+        <input id="mass" type="range" min="1" max="10" step="0.2" value="6" />
+      </div>
+      <div class="slider-row">
+        <label for="speed">Velocità pianeta <span id="speedOut">1.0×</span></label>
+        <input id="speed" type="range" min="0.4" max="2.4" step="0.1" value="1" />
+      </div>
+      <div class="slider-row">
+        <label for="cameraMode">Camera <span id="cameraOut">attiva</span></label>
+        <input id="cameraMode" type="range" min="0" max="1" step="1" value="1" />
+      </div>
+    </aside>
+
+    <section class="lesson glass">
+      <div class="phase">
+        <div class="step" id="lessonStep">Fase 1</div>
+        <div class="mini" id="lessonMini">Spazio-tempo curvo</div>
+      </div>
+      <div>
+        <h2 id="lessonTitle">La massa dice allo spazio-tempo come curvarsi</h2>
+        <p id="lessonText">La griglia non è un tappeto reale: è una metafora visiva. Serve a far vedere l’idea centrale: una grande massa modifica la geometria intorno a sé. I corpi non vengono “tirati” come da una corda: seguono le strade naturali dentro una geometria curva.</p>
+      </div>
+    </section>
+
+    <div class="toast" id="toast">Messaggio</div>
+  </main>
+
+  <div class="label3d goldLabel" id="labelMass">Massa centrale</div>
+  <div class="label3d blueLabel" id="labelGrid">Spazio-tempo curvo</div>
+  <div class="label3d greenLabel" id="labelPlanet">Pianeta</div>
+  <div class="label3d violetLabel" id="labelGeo">Geodetica</div>
+  <div class="label3d goldLabel" id="labelLight">Raggio di luce piegato</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    const canvas=document.getElementById('scene');
+    const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer.setSize(innerWidth,innerHeight);
+    renderer.outputColorSpace=THREE.SRGBColorSpace;
+    renderer.toneMapping=THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure=1.08;
+
+    const scene=new THREE.Scene();
+    scene.fog=new THREE.FogExp2(0x050712,.045);
+
+    const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,220);
+    camera.position.set(0,6.0,13.5);
+
+    const controls=new OrbitControls(camera,renderer.domElement);
+    controls.enableDamping=true;
+    controls.dampingFactor=.07;
+    controls.enablePan=false;
+    controls.minDistance=7;
+    controls.maxDistance=24;
+    controls.maxPolarAngle=Math.PI*.78;
+    controls.target.set(0,.1,0);
+
+    const composer=new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene,camera));
+    const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.80,.52,.12);
+    composer.addPass(bloom);
+
+    const state={running:true,gridVisible:true,einstein:true,mass:6,speed:1,autoCamera:true,time:0,light:false,lightT:0};
+
+    function std(color,metal=.35,rough=.32,emissive=0x000000,intensity=0){return new THREE.MeshStandardMaterial({color,metalness:metal,roughness:rough,emissive,emissiveIntensity:intensity})}
+    function basic(color,opacity=1){return new THREE.MeshBasicMaterial({color,transparent:true,opacity,blending:THREE.AdditiveBlending,depthWrite:false})}
+
+    scene.add(new THREE.HemisphereLight(0x8bcaff,0x05030a,1.15));
+    const key=new THREE.DirectionalLight(0xffffff,2.2); key.position.set(4,8,6); scene.add(key);
+    const blueLight=new THREE.PointLight(0x45caff,2.6,22); blueLight.position.set(-5,4,5); scene.add(blueLight);
+    const goldLight=new THREE.PointLight(0xffb44d,3.2,22); goldLight.position.set(0,2.4,1.2); scene.add(goldLight);
+
+    const root=new THREE.Group();
+    const gridGroup=new THREE.Group();
+    const orbitGroup=new THREE.Group();
+    const lightGroup=new THREE.Group();
+    const starsGroup=new THREE.Group();
+    scene.add(root,gridGroup,orbitGroup,lightGroup,starsGroup);
+
+    // Fondo stellare
+    const starGeo=new THREE.BufferGeometry();
+    const starPos=[];
+    for(let i=0;i<620;i++){
+      const r=15+Math.random()*42,a=Math.random()*Math.PI*2,y=-4+Math.random()*20;
+      starPos.push(Math.cos(a)*r,y,Math.sin(a)*r);
+    }
+    starGeo.setAttribute('position',new THREE.Float32BufferAttribute(starPos,3));
+    const stars=new THREE.Points(starGeo,new THREE.PointsMaterial({color:0x8fdcff,size:.036,transparent:true,opacity:.38}));
+    starsGroup.add(stars);
+
+    // Superficie spazio-tempo: reticolo deformabile
+    const size=12, seg=72;
+    const planeGeo=new THREE.PlaneGeometry(size,size,seg,seg);
+    planeGeo.rotateX(-Math.PI/2);
+    const basePositions=planeGeo.attributes.position.array.slice();
+    const gridMat=new THREE.MeshStandardMaterial({color:0x0b1a34,metalness:.2,roughness:.38,transparent:true,opacity:.42,wireframe:true,emissive:0x0b64a8,emissiveIntensity:.20});
+    const spacetime=new THREE.Mesh(planeGeo,gridMat);
+    spacetime.position.y=-1.1;
+    gridGroup.add(spacetime);
+
+    const softSurface=new THREE.Mesh(planeGeo.clone(),new THREE.MeshStandardMaterial({color:0x061027,metalness:.1,roughness:.5,transparent:true,opacity:.16,side:THREE.DoubleSide,emissive:0x06213a,emissiveIntensity:.12}));
+    softSurface.position.copy(spacetime.position);
+    gridGroup.add(softSurface);
+
+    function curvatureY(x,z,mass){
+      const r=Math.sqrt(x*x+z*z)+.28;
+      const well = -mass*.36*Math.exp(-r*r/7.5)/(r*.52+.52);
+      const ripple = Math.sin(r*2.2-state.time*1.4)*.018*mass*Math.exp(-r*.55);
+      return state.einstein ? well+ripple : 0;
+    }
+    function updateGrid(){
+      const arr=spacetime.geometry.attributes.position.array;
+      const arr2=softSurface.geometry.attributes.position.array;
+      for(let i=0;i<arr.length;i+=3){
+        const x=basePositions[i], z=basePositions[i+2];
+        const y=curvatureY(x,z,state.mass);
+        arr[i]=x; arr[i+1]=y; arr[i+2]=z;
+        arr2[i]=x; arr2[i+1]=y-.015; arr2[i+2]=z;
+      }
+      spacetime.geometry.attributes.position.needsUpdate=true;
+      softSurface.geometry.attributes.position.needsUpdate=true;
+      spacetime.geometry.computeVertexNormals();
+      softSurface.geometry.computeVertexNormals();
+      gridMat.opacity = state.gridVisible ? (state.einstein?.46:.18) : 0;
+      softSurface.material.opacity = state.gridVisible ? (state.einstein?.16:.05) : 0;
+    }
+
+    // Massa centrale
+    const massGroup=new THREE.Group();
+    massGroup.position.y=.08;
+    root.add(massGroup);
+    const starMat=std(0xffb44d,.25,.18,0xff7b1a,1.25);
+    const star=new THREE.Mesh(new THREE.SphereGeometry(.72,64,32),starMat); massGroup.add(star);
+    const starHalo=new THREE.Mesh(new THREE.SphereGeometry(1.25,64,32),basic(0xffb44d,.13)); massGroup.add(starHalo);
+    const lensHalo=new THREE.Mesh(new THREE.TorusGeometry(1.48,.018,12,160),basic(0xffb44d,.42)); lensHalo.rotation.x=Math.PI/2; massGroup.add(lensHalo);
+
+    // Pianeta e orbita/geodetica
+    const planetMat=std(0x55ff9d,.25,.22,0x0cb96c,.65);
+    const planet=new THREE.Mesh(new THREE.SphereGeometry(.18,32,16),planetMat); root.add(planet);
+    planet.add(new THREE.Mesh(new THREE.SphereGeometry(.34,32,16),basic(0x55ff9d,.12)));
+
+    const trailGeo=new THREE.BufferGeometry();
+    const trailCount=220;
+    const trailPos=new Float32Array(trailCount*3);
+    trailGeo.setAttribute('position',new THREE.BufferAttribute(trailPos,3));
+    const trail=new THREE.Line(trailGeo,new THREE.LineBasicMaterial({color:0x55ff9d,transparent:true,opacity:.55,blending:THREE.AdditiveBlending}));
+    orbitGroup.add(trail);
+
+    const orbitR=3.55;
+    const guide=new THREE.Mesh(new THREE.TorusGeometry(orbitR,.01,8,220),basic(0x9c7cff,.28));
+    guide.rotation.x=Math.PI/2;
+    orbitGroup.add(guide);
+
+    // Frecce geodetiche
+    const arrows=[];
+    for(let i=0;i<20;i++){
+      const cone=new THREE.Mesh(new THREE.ConeGeometry(.075,.22,18),basic(0x55ff9d,.68));
+      cone.userData.phase=i/20;
+      arrows.push(cone); orbitGroup.add(cone);
+    }
+
+    // Raggio di luce piegato
+    const rayPoints=120;
+    const rayGeo=new THREE.BufferGeometry();
+    const rayPos=new Float32Array(rayPoints*3);
+    rayGeo.setAttribute('position',new THREE.BufferAttribute(rayPos,3));
+    const rayLine=new THREE.Line(rayGeo,new THREE.LineBasicMaterial({color:0xffb44d,transparent:true,opacity:0,blending:THREE.AdditiveBlending}));
+    lightGroup.add(rayLine);
+    const photon=new THREE.Mesh(new THREE.SphereGeometry(.105,24,16),basic(0xffb44d,0));
+    lightGroup.add(photon);
+
+    function rayCurvePoint(t){
+      const x=-6.5+t*13;
+      const impact=1.15;
+      const bend=state.einstein ? state.mass*.16*Math.exp(-(x*x)/8) : 0;
+      const z=impact-bend;
+      const y=.86+Math.sin(t*Math.PI)*.16;
+      return new THREE.Vector3(x,y,z);
+    }
+    function updateLightRay(){
+      const arr=rayGeo.attributes.position.array;
+      for(let i=0;i<rayPoints;i++){
+        const t=i/(rayPoints-1);
+        const p=rayCurvePoint(t);
+        arr[i*3]=p.x; arr[i*3+1]=p.y; arr[i*3+2]=p.z;
+      }
+      rayGeo.attributes.position.needsUpdate=true;
+    }
+
+    // Vettori/linee Newtoniane facoltative
+    const newtonGroup=new THREE.Group(); scene.add(newtonGroup);
+    const attractionLineGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
+    const attractionLine=new THREE.Line(attractionLineGeo,new THREE.LineBasicMaterial({color:0x9c7cff,transparent:true,opacity:0,blending:THREE.AdditiveBlending}));
+    newtonGroup.add(attractionLine);
+
+    // UI
+    const lessonStep=document.getElementById('lessonStep');
+    const lessonMini=document.getElementById('lessonMini');
+    const lessonTitle=document.getElementById('lessonTitle');
+    const lessonText=document.getElementById('lessonText');
+    const mass=document.getElementById('mass');
+    const massOut=document.getElementById('massOut');
+    const speed=document.getElementById('speed');
+    const speedOut=document.getElementById('speedOut');
+    const cameraMode=document.getElementById('cameraMode');
+    const cameraOut=document.getElementById('cameraOut');
+    const toast=document.getElementById('toast');
+    let toastTimer=null;
+
+    function showToast(t){toast.textContent=t;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1500)}
+    function setLesson(step,mini,title,html){lessonStep.textContent=step;lessonMini.textContent=mini;lessonTitle.textContent=title;lessonText.innerHTML=html}
+    function refreshLesson(){
+      if(!state.einstein){
+        setLesson('Fase N','Newton','Forza a distanza: modello utile, ma incompleto','Nel modello newtoniano la gravità appare come una forza che tira il pianeta verso la massa centrale. Funziona benissimo in molti casi, ma non spiega tutto: Einstein cambia la domanda.');
+        return;
+      }
+      if(state.light){
+        setLesson('Fase 3','Luce deviata','Anche la luce segue la geometria curva','Il raggio luminoso non ha massa, eppure viene deviato. Questo è il colpo serio: non è una corda invisibile che tira, è lo <em>spazio-tempo curvo</em> che cambia la strada possibile.');
+        return;
+      }
+      if(state.mass<3){
+        setLesson('Fase 1','Curvatura debole','Poca massa, poca curvatura','Con una massa piccola la griglia si deforma poco. Il pianeta segue quasi una traiettoria ordinaria: la geometria è appena alterata.');
+      }else if(state.mass<7.5){
+        setLesson('Fase 2','Spazio-tempo curvo','La massa modifica la geometria','La massa centrale incurva la griglia. Il pianeta non cade perché “qualcuno lo tira”: segue una <strong>geodetica</strong>, cioè il cammino più naturale dentro una geometria deformata.');
+      }else{
+        setLesson('Fase 2','Curvatura intensa','Più massa, più deformazione','Aumentando la massa, la curvatura cresce. L’orbita si stringe e il pozzo gravitazionale diventa più profondo. La gravità qui non è una cosa: è forma dello spazio-tempo.');
+      }
+    }
+
+    document.getElementById('startBtn').onclick=()=>{state.running=true;refreshLesson();showToast('Animazione avviata')};
+    document.getElementById('stopBtn').onclick=()=>{state.running=false;setLesson('Fase 0','Pausa','La scena è ferma, non la gravità','Hai fermato la visualizzazione. Nella realtà il campo gravitazionale non “si spegne”: qui blocchiamo la scena per osservare meglio la geometria.');showToast('Animazione fermata')};
+    document.getElementById('gridBtn').onclick=()=>{state.gridVisible=!state.gridVisible;gridGroup.visible=state.gridVisible;showToast(state.gridVisible?'Griglia visibile':'Griglia nascosta')};
+    document.getElementById('lightBtn').onclick=()=>{state.light=true;state.lightT=0;refreshLesson();showToast('Raggio di luce lanciato')};
+    document.getElementById('modeBtn').onclick=()=>{state.einstein=!state.einstein;document.getElementById('modeBtn').textContent=state.einstein?'◎ Einstein':'↧ Newton';refreshLesson();showToast(state.einstein?'Modalità Einstein: geometria curva':'Modalità Newton: forza verso il centro')};
+    document.getElementById('resetBtn').onclick=()=>{state.mass=6;mass.value=6;massOut.textContent='6.0';state.speed=1;speed.value=1;speedOut.textContent='1.0×';state.einstein=true;document.getElementById('modeBtn').textContent='◎ Einstein';state.light=false;state.lightT=0;refreshLesson();showToast('Reset completato')};
+    mass.oninput=()=>{state.mass=Number(mass.value);massOut.textContent=state.mass.toFixed(1);refreshLesson()};
+    speed.oninput=()=>{state.speed=Number(speed.value);speedOut.textContent=state.speed.toFixed(1)+'×'};
+    cameraMode.oninput=()=>{state.autoCamera=Number(cameraMode.value)===1;cameraOut.textContent=state.autoCamera?'attiva':'manuale';showToast(state.autoCamera?'Camera automatica':'Camera manuale')};
+
+    // Etichette
+    const labels=[
+      ['labelMass',new THREE.Vector3(0,1.45,0)],
+      ['labelGrid',new THREE.Vector3(-3.6,-.55,-2.2)],
+      ['labelPlanet',new THREE.Vector3(3.55,.55,0)],
+      ['labelGeo',new THREE.Vector3(-.8,.25,3.25)],
+      ['labelLight',new THREE.Vector3(2.9,1.35,1.0)]
+    ];
+    function projectLabels(){
+      for(const [id,pos] of labels){
+        const el=document.getElementById(id); const v=pos.clone().project(camera);
+        el.style.left=((v.x*.5+.5)*innerWidth)+'px';
+        el.style.top=((-v.y*.5+.5)*innerHeight)+'px';
+        el.style.display=(v.z<1&&v.z>-1&&innerWidth>1080&&innerHeight>760)?'block':'none';
+      }
+    }
+
+    const clock=new THREE.Clock();
+    function animate(){
+      requestAnimationFrame(animate);
+      const dt=Math.min(clock.getDelta(),.033);
+      if(state.running) state.time += dt*state.speed;
+
+      if(state.autoCamera){
+        const a=state.time*.085;
+        camera.position.x+=(Math.sin(a)*12.5-camera.position.x)*.014;
+        camera.position.z+=(Math.cos(a)*12.5-camera.position.z)*.014;
+        camera.position.y+=(5.9+Math.sin(a*1.6)*.34-camera.position.y)*.014;
+      }
+      controls.update();
+
+      updateGrid();
+
+      const norm=state.mass/10;
+      star.scale.setScalar(.75+norm*.72);
+      starHalo.scale.setScalar(1.0+norm*.95+Math.sin(state.time*2.2)*.04);
+      starHalo.material.opacity=.08+norm*.11;
+      lensHalo.scale.setScalar(1.0+norm*.38);
+      lensHalo.material.opacity=state.einstein?.18+norm*.28:.08;
+      starMat.emissiveIntensity=1.0+norm*1.25;
+      goldLight.intensity=2.2+norm*3.4;
+      goldLight.distance=18+norm*10;
+
+      // Pianeta: orbita con piccola precessione in modalità Einstein
+      const precession=state.einstein ? state.time*.055*norm : 0;
+      const theta=state.time*.72 + precession;
+      const eccentric=.12+norm*.10;
+      const r=orbitR*(1-eccentric*eccentric)/(1+eccentric*Math.cos(theta));
+      const x=Math.cos(theta+precession)*r;
+      const z=Math.sin(theta+precession)*r;
+      const y=curvatureY(x,z,state.mass)-.72;
+      planet.position.set(x,y,z);
+      planet.scale.setScalar(1+Math.sin(state.time*5)*.025);
+
+      // Trail orbitale
+      const arr=trail.geometry.attributes.position.array;
+      for(let i=0;i<trailCount;i++){
+        const k=i/(trailCount-1);
+        const t=theta - (1-k)*Math.PI*2.15;
+        const p=state.einstein ? t*.075*norm : 0;
+        const rr=orbitR*(1-eccentric*eccentric)/(1+eccentric*Math.cos(t));
+        const xx=Math.cos(t+p)*rr;
+        const zz=Math.sin(t+p)*rr;
+        arr[i*3]=xx; arr[i*3+1]=curvatureY(xx,zz,state.mass)-.70; arr[i*3+2]=zz;
+      }
+      trail.geometry.attributes.position.needsUpdate=true;
+      trail.material.opacity=state.einstein?.62:.38;
+      guide.material.opacity=state.einstein?.14:.38;
+      guide.scale.setScalar(1+norm*.04);
+
+      arrows.forEach((c,i)=>{
+        const t=theta + c.userData.phase*Math.PI*2;
+        const rr=orbitR*(1-eccentric*eccentric)/(1+eccentric*Math.cos(t));
+        const xx=Math.cos(t)*rr, zz=Math.sin(t)*rr;
+        c.position.set(xx,curvatureY(xx,zz,state.mass)-.52,zz);
+        c.rotation.y=-t+Math.PI/2;
+        c.rotation.x=Math.PI/2;
+        c.material.opacity=state.einstein?.34:.18;
+      });
+
+      // Linea Newtoniana: appare solo in modalità Newton
+      const lp=attractionLine.geometry.attributes.position.array;
+      lp[0]=0;lp[1]=0;lp[2]=0;lp[3]=planet.position.x;lp[4]=planet.position.y;lp[5]=planet.position.z;
+      attractionLine.geometry.attributes.position.needsUpdate=true;
+      attractionLine.material.opacity=state.einstein?0:.65;
+
+      // Luce deviata
+      updateLightRay();
+      if(state.light){
+        state.lightT += dt*.55*state.speed;
+        const t=Math.min(state.lightT,1);
+        photon.position.copy(rayCurvePoint(t));
+        photon.material.opacity=.95;
+        rayLine.material.opacity=.72;
+        if(t>=1){state.light=false;state.lightT=0;rayLine.material.opacity=.22;photon.material.opacity=0;refreshLesson();}
+      }else{
+        photon.material.opacity=0;
+        rayLine.material.opacity=state.einstein?.18:.05;
+      }
+
+      // Dettagli cinematici
+      stars.rotation.y += dt*.006;
+      root.rotation.y += dt*.01;
+      orbitGroup.rotation.y += dt*.003;
+      bloom.strength=.62+norm*.28+(state.light?.42:0);
+      blueLight.intensity=2.3+Math.sin(state.time*1.2)*.35;
+
+      projectLabels();
+      composer.render();
+    }
+
+    addEventListener('resize',()=>{
+      camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); bloom.setSize(innerWidth,innerHeight); projectLabels();
+    });
+
+    refreshLesson();
+    updateGrid();
+    animate();
+  </script>
+</body>
+</html>
