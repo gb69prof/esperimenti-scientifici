@@ -1,1 +1,593 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Esperimento 3D — Energia attorno al filo</title>
+
+  <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    :root{
+      --bg:#040610;
+      --panel:rgba(8,15,35,.86);
+      --panel2:rgba(8,15,35,.68);
+      --line:rgba(91,196,255,.28);
+      --cyan:#45caff;
+      --gold:#ffb44d;
+      --orange:#ff7b1a;
+      --green:#55ff9d;
+      --red:#ff4b5c;
+      --text:#f5fbff;
+      --muted:#a9bed8;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      overflow:hidden;
+      background:radial-gradient(circle at 50% 40%,#121a39 0%,#060915 52%,#02030a 100%);
+      color:var(--text);
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    }
+
+    #scene{
+      position:fixed;
+      inset:0;
+      width:100vw;
+      height:100vh;
+      display:block;
+    }
+
+    /* L'interfaccia non invade più il centro dell'esperimento */
+    .hud{
+      position:fixed;
+      inset:0;
+      display:grid;
+      grid-template-columns:280px 1fr 300px;
+      grid-template-rows:auto 1fr auto;
+      gap:14px;
+      padding:14px;
+      pointer-events:none;
+    }
+
+    .glass{
+      background:linear-gradient(180deg,rgba(12,24,56,.82),rgba(5,9,22,.64));
+      border:1px solid var(--line);
+      border-radius:22px;
+      box-shadow:0 16px 60px rgba(0,0,0,.42), inset 0 0 28px rgba(69,202,255,.04);
+      backdrop-filter:blur(14px);
+    }
+
+    .title{
+      grid-column:1/4;
+      justify-self:center;
+      width:min(980px,100%);
+      padding:10px 20px 12px;
+      text-align:center;
+    }
+    .title h1{
+      margin:0;
+      font-size:clamp(1.7rem,3.4vw,3.8rem);
+      line-height:1;
+      letter-spacing:-.045em;
+      text-shadow:0 0 20px rgba(69,202,255,.50);
+    }
+    .title p{
+      margin:6px 0 0;
+      color:var(--muted);
+      font-size:clamp(.82rem,1.1vw,1rem);
+    }
+
+    .legend{
+      grid-column:1;
+      grid-row:2;
+      align-self:start;
+      padding:14px;
+      pointer-events:auto;
+    }
+    .legend h2,.controls h2{
+      margin:0 0 10px;
+      font-size:.78rem;
+      letter-spacing:.15em;
+      text-transform:uppercase;
+      color:#dff6ff;
+    }
+    .legend-item{
+      display:grid;
+      grid-template-columns:16px 1fr;
+      gap:9px;
+      align-items:start;
+      padding:8px 0;
+      border-top:1px solid rgba(255,255,255,.06);
+      color:#dcecff;
+      line-height:1.32;
+      font-size:.86rem;
+    }
+    .legend-item:first-of-type{border-top:0}
+    .dot{width:12px;height:12px;border-radius:50%;margin-top:3px;box-shadow:0 0 14px currentColor}
+    .d-cyan{background:var(--cyan);color:var(--cyan)}
+    .d-gold{background:var(--gold);color:var(--gold)}
+    .d-blue{background:#287dff;color:#287dff}
+    .d-green{background:var(--green);color:var(--green)}
+
+    .controls{
+      grid-column:3;
+      grid-row:2;
+      align-self:start;
+      padding:14px;
+      pointer-events:auto;
+    }
+    .btn-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+      margin-bottom:10px;
+    }
+    button{
+      border:0;
+      border-radius:14px;
+      padding:10px 8px;
+      cursor:pointer;
+      color:#fff;
+      font-weight:900;
+      letter-spacing:.01em;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 10px 22px rgba(0,0,0,.22);
+      transition:transform .16s ease, filter .16s ease;
+    }
+    button:hover{transform:translateY(-1px);filter:brightness(1.12)}
+    button:active{transform:translateY(1px) scale(.99)}
+    .start{background:linear-gradient(135deg,#35d878,#167e45)}
+    .stop{background:linear-gradient(135deg,#ff4b5c,#8b1a27)}
+    .toggle{background:linear-gradient(135deg,#3494ff,#1a41b0)}
+    .break{background:linear-gradient(135deg,#ffa447,#a0490f)}
+
+    .slider-row{
+      margin-top:9px;
+      padding:10px;
+      border-radius:16px;
+      background:rgba(255,255,255,.045);
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .slider-row label{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:7px;
+      color:#dcecff;
+      font-size:.85rem;
+      font-weight:800;
+    }
+    .slider-row span{color:var(--gold);font-variant-numeric:tabular-nums}
+    input[type="range"]{width:100%;accent-color:var(--cyan)}
+
+    .lesson{
+      grid-column:1/4;
+      grid-row:3;
+      justify-self:center;
+      width:min(1050px,100%);
+      padding:14px 18px;
+      pointer-events:auto;
+      border-color:rgba(255,180,77,.32);
+      display:grid;
+      grid-template-columns:170px 1fr;
+      gap:16px;
+      align-items:center;
+    }
+    .phase{
+      border-right:1px solid rgba(255,255,255,.10);
+      padding-right:14px;
+    }
+    .phase .step{
+      color:var(--gold);
+      letter-spacing:.18em;
+      text-transform:uppercase;
+      font-size:.72rem;
+      font-weight:950;
+      margin-bottom:5px;
+    }
+    .phase .mini{
+      color:#dff6ff;
+      font-size:.88rem;
+      line-height:1.25;
+      font-weight:800;
+    }
+    .lesson h2{
+      margin:0 0 5px;
+      font-size:clamp(1.1rem,1.7vw,1.55rem);
+      letter-spacing:-.03em;
+    }
+    .lesson p{
+      margin:0;
+      color:#d9e7f4;
+      font-size:clamp(.86rem,1.1vw,1rem);
+      line-height:1.42;
+    }
+    .lesson em{font-style:normal;color:var(--cyan);font-weight:900}
+    .lesson strong{color:white}
+
+    /* Etichette: piccole, esterne, non più in mezzo alla scena */
+    .label3d{
+      position:absolute;
+      transform:translate(-50%,-50%);
+      padding:5px 8px;
+      border-radius:999px;
+      color:white;
+      background:rgba(3,8,18,.68);
+      border:1px solid rgba(255,255,255,.16);
+      font-weight:900;
+      font-size:.72rem;
+      white-space:nowrap;
+      text-shadow:0 1px 4px #000;
+      pointer-events:none;
+      backdrop-filter:blur(8px);
+      opacity:.92;
+    }
+    .goldLabel{border-color:rgba(255,180,77,.42);box-shadow:0 0 18px rgba(255,180,77,.18)}
+    .blueLabel{border-color:rgba(69,202,255,.40);box-shadow:0 0 18px rgba(69,202,255,.14)}
+
+    .toast{
+      grid-column:2;
+      grid-row:2;
+      justify-self:center;
+      align-self:start;
+      margin-top:8px;
+      opacity:0;
+      transform:translateY(-8px);
+      transition:.3s ease;
+      padding:10px 14px;
+      border-radius:999px;
+      background:rgba(0,0,0,.58);
+      border:1px solid rgba(255,180,77,.25);
+      color:#fff4dd;
+      font-weight:900;
+      pointer-events:none;
+      text-align:center;
+    }
+    .toast.show{opacity:1;transform:translateY(0)}
+
+    /* Modalità schermi bassi / iPad: pannelli compatti, scena libera */
+    @media (max-height:760px), (max-width:1080px){
+      .hud{
+        grid-template-columns:1fr 1fr;
+        grid-template-rows:auto 1fr auto auto;
+        padding:10px;
+        gap:10px;
+      }
+      .title{grid-column:1/3;padding:8px 14px}
+      .title p{display:none}
+      .legend{display:none}
+      .controls{
+        grid-column:1/3;
+        grid-row:4;
+        width:100%;
+        justify-self:center;
+        display:grid;
+        grid-template-columns:1fr 1fr 1fr;
+        gap:8px;
+        padding:10px;
+      }
+      .controls h2{display:none}
+      .btn-grid{grid-column:1;grid-row:1;grid-template-columns:repeat(4,1fr);margin:0}
+      .slider-row{margin:0;padding:8px}
+      .lesson{
+        grid-column:1/3;
+        grid-row:3;
+        width:100%;
+        grid-template-columns:120px 1fr;
+        padding:10px 12px;
+      }
+      .lesson h2{font-size:1.05rem}
+      .lesson p{font-size:.84rem;line-height:1.32}
+      .phase .mini{font-size:.78rem}
+      .label3d{display:none!important}
+      .toast{grid-column:1/3;grid-row:2}
+    }
+
+    @media (max-width:700px){
+      .controls{grid-template-columns:1fr;}
+      .btn-grid{grid-column:1;grid-template-columns:repeat(2,1fr)}
+      .slider-row{display:none}
+      .lesson{grid-template-columns:1fr;gap:6px}
+      .phase{border-right:0;border-bottom:1px solid rgba(255,255,255,.10);padding:0 0 7px}
+      .lesson p{display:none}
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <main class="hud">
+    <section class="title glass">
+      <h1>Dove scorre davvero l’energia?</h1>
+      <p>Esperimento 3D: elettroni lenti nel filo, energia veloce nel campo attorno al conduttore.</p>
+    </section>
+
+    <aside class="legend glass">
+      <h2>Legenda</h2>
+      <div class="legend-item"><span class="dot d-cyan"></span><span><strong>Elettroni</strong>: si muovono nel filo, ma lentamente.</span></div>
+      <div class="legend-item"><span class="dot d-gold"></span><span><strong>Energia</strong>: scorre nello spazio attorno al filo.</span></div>
+      <div class="legend-item"><span class="dot d-blue"></span><span><strong>Campo magnetico</strong>: anelli blu prodotti dalla corrente.</span></div>
+      <div class="legend-item"><span class="dot d-green"></span><span><strong>Lampadina</strong>: trasforma energia in luce e calore.</span></div>
+    </aside>
+
+    <aside class="controls glass">
+      <h2>Comandi</h2>
+      <div class="btn-grid">
+        <button class="start" id="startBtn">▶ Avvia</button>
+        <button class="stop" id="stopBtn">■ Ferma</button>
+        <button class="toggle" id="fieldBtn">👁 Campi</button>
+        <button class="break" id="breakBtn">⚡ Circuito</button>
+      </div>
+      <div class="slider-row">
+        <label for="voltage">Tensione <span id="voltageOut">6.0 V</span></label>
+        <input id="voltage" type="range" min="1" max="12" step="0.5" value="6" />
+      </div>
+      <div class="slider-row">
+        <label for="resistance">Resistenza <span id="resistanceOut">5.0 Ω</span></label>
+        <input id="resistance" type="range" min="1" max="12" step="0.5" value="5" />
+      </div>
+      <div class="slider-row">
+        <label for="cameraMode">Camera <span id="cameraOut">attiva</span></label>
+        <input id="cameraMode" type="range" min="0" max="1" step="1" value="1" />
+      </div>
+    </aside>
+
+    <section class="lesson glass">
+      <div class="phase">
+        <div class="step" id="lessonStep">Fase 0</div>
+        <div class="mini" id="lessonMini">Sistema spento</div>
+      </div>
+      <div>
+        <h2 id="lessonTitle">Materia pronta, energia assente</h2>
+        <p id="lessonText">Il filo contiene già elettroni liberi, ma senza campo elettrico non c’è corrente organizzata. La batteria è lì, la lampadina è lì, ma il fenomeno non è ancora nato.</p>
+      </div>
+    </section>
+
+    <div class="toast" id="toast">Messaggio</div>
+  </main>
+
+  <div class="label3d blueLabel" id="labelBattery">Batteria</div>
+  <div class="label3d blueLabel" id="labelWire">Filo</div>
+  <div class="label3d blueLabel" id="labelElectrons">Elettroni lenti</div>
+  <div class="label3d goldLabel" id="labelEnergy">Energia nel campo</div>
+  <div class="label3d blueLabel" id="labelMagnetic">Campo magnetico</div>
+  <div class="label3d goldLabel" id="labelLamp">Lampadina</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    const canvas=document.getElementById('scene');
+    const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer.setSize(innerWidth,innerHeight);
+    renderer.outputColorSpace=THREE.SRGBColorSpace;
+    renderer.toneMapping=THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure=1.08;
+
+    const scene=new THREE.Scene();
+    scene.fog=new THREE.FogExp2(0x050712,.045);
+
+    const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,200);
+    camera.position.set(0,4.5,13.5);
+
+    const controls=new OrbitControls(camera,renderer.domElement);
+    controls.enableDamping=true;
+    controls.dampingFactor=.07;
+    controls.enablePan=false;
+    controls.minDistance=8;
+    controls.maxDistance=22;
+    controls.maxPolarAngle=Math.PI*.72;
+    controls.target.set(0,.25,0);
+
+    const composer=new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene,camera));
+    const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.78,.52,.14);
+    composer.addPass(bloom);
+
+    const state={running:false,fieldsVisible:true,circuitOpen:false,voltage:6,resistance:5,autoCamera:true,time:0};
+
+    function std(color,metal=.4,rough=.35,em=0x000000,intensity=0){
+      return new THREE.MeshStandardMaterial({color,metalness:metal,roughness:rough,emissive:em,emissiveIntensity:intensity});
+    }
+    function basic(color,opacity=1){
+      return new THREE.MeshBasicMaterial({color,transparent:true,opacity,blending:THREE.AdditiveBlending,depthWrite:false});
+    }
+
+    scene.add(new THREE.HemisphereLight(0x8bcaff,0x04030a,1.15));
+    const key=new THREE.DirectionalLight(0xffffff,2.5); key.position.set(4,8,6); scene.add(key);
+    const rim=new THREE.PointLight(0x42c7ff,3.3,24); rim.position.set(-7,4,5); scene.add(rim);
+    const goldLight=new THREE.PointLight(0xffb347,2.2,18); goldLight.position.set(4,2.6,2); scene.add(goldLight);
+
+    const floor=new THREE.Mesh(new THREE.CircleGeometry(18,128),new THREE.MeshStandardMaterial({color:0x091124,metalness:.55,roughness:.22}));
+    floor.rotation.x=-Math.PI/2; floor.position.y=-1.45; scene.add(floor);
+    const grid=new THREE.GridHelper(30,40,0x1d74ff,0x19335f); grid.position.y=-1.43; grid.material.transparent=true; grid.material.opacity=.20; scene.add(grid);
+
+    const circuit=new THREE.Group(), fieldsGroup=new THREE.Group(), energyGroup=new THREE.Group(), electronGroup=new THREE.Group();
+    scene.add(circuit,fieldsGroup,energyGroup,electronGroup);
+
+    // Batteria
+    const battery=new THREE.Group(); battery.position.set(-6.2,0.15,0); circuit.add(battery);
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(.72,.72,2.9,64),std(0x111827,.55,.25)); body.position.y=.4; battery.add(body);
+    const cap=new THREE.Mesh(new THREE.CylinderGeometry(.72,.72,1.05,64),std(0xc77c32,.75,.18)); cap.position.y=1.32; battery.add(cap);
+    const top=new THREE.Mesh(new THREE.CylinderGeometry(.34,.34,.22,48),std(0xd7e7f7,.9,.17)); top.position.y=2.08; battery.add(top);
+    const boltShape=new THREE.Shape();
+    boltShape.moveTo(-.1,.55); boltShape.lineTo(.28,.55); boltShape.lineTo(.05,.03); boltShape.lineTo(.32,.03); boltShape.lineTo(-.18,-.62); boltShape.lineTo(-.02,-.15); boltShape.lineTo(-.27,-.15); boltShape.lineTo(-.1,.55);
+    const bolt=new THREE.Mesh(new THREE.ShapeGeometry(boltShape),std(0xffb347,.15,.2,0xff9c2f,.7)); bolt.position.set(0,.26,.727); battery.add(bolt);
+
+    function spriteText(txt,color='#fff',size=96){
+      const c=document.createElement('canvas'); c.width=512; c.height=256; const ctx=c.getContext('2d');
+      ctx.font=`900 ${size}px Arial`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle=color; ctx.shadowColor=color; ctx.shadowBlur=16; ctx.fillText(txt,256,128);
+      const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
+      const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true})); sp.scale.set(1,.5,1); return sp;
+    }
+    const plus=spriteText('+','#fff',120); plus.position.set(0,1.52,.735); battery.add(plus);
+    const minus=spriteText('−','#fff',120); minus.position.set(0,-.76,.735); battery.add(minus);
+
+    // Filo: più alto nel centro visivo, così i pannelli non lo coprono
+    const wireY=.55;
+    const wireMat=new THREE.MeshPhysicalMaterial({color:0x90dfff,metalness:.35,roughness:.08,transmission:.35,transparent:true,opacity:.45,thickness:.5,emissive:0x063456,emissiveIntensity:.18});
+    const wire=new THREE.Mesh(new THREE.CylinderGeometry(.25,.25,9.3,64),wireMat); wire.rotation.z=Math.PI/2; wire.position.set(0,wireY,0); circuit.add(wire);
+    const core=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,9.55,32),new THREE.MeshStandardMaterial({color:0xffb16b,metalness:.85,roughness:.22,transparent:true,opacity:.55})); core.rotation.z=Math.PI/2; core.position.set(0,wireY,0); circuit.add(core);
+    [-4.85,4.85].forEach(x=>{const c=new THREE.Mesh(new THREE.CylinderGeometry(.36,.36,.28,48),std(0xd9e6f2,.9,.18)); c.rotation.z=Math.PI/2;c.position.set(x,wireY,0);circuit.add(c)});
+
+    function tube(points,color,r=.055,em=.12){
+      const curve=new THREE.CatmullRomCurve3(points);
+      return new THREE.Mesh(new THREE.TubeGeometry(curve,96,r,16,false),std(color,.35,.22,color,em));
+    }
+    circuit.add(tube([new THREE.Vector3(-6.2,2.08,0),new THREE.Vector3(-6.2,2.55,0),new THREE.Vector3(-4.95,2.3,0),new THREE.Vector3(-4.78,wireY,0)],0xd63535,.06,.18));
+    circuit.add(tube([new THREE.Vector3(-6.2,-.95,0),new THREE.Vector3(-5.9,-1.18,0),new THREE.Vector3(5.8,-1.15,0),new THREE.Vector3(6.58,-.55,0)],0x225cff,.055,.14));
+    circuit.add(tube([new THREE.Vector3(4.85,wireY,0),new THREE.Vector3(5.42,.42,0),new THREE.Vector3(5.85,-.25,0),new THREE.Vector3(6.0,-.32,0)],0xd63535,.055,.14));
+
+    // Lampadina
+    const lamp=new THREE.Group(); lamp.position.set(6.4,.05,0); circuit.add(lamp);
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(.55,.65,.55,64),std(0x8f969c,.85,.2)); base.position.y=-.32; lamp.add(base);
+    const glassMat=new THREE.MeshPhysicalMaterial({color:0xffefc2,transparent:true,opacity:.30,roughness:.04,transmission:.45,thickness:.9,emissive:0xffb347,emissiveIntensity:.05});
+    const glass=new THREE.Mesh(new THREE.SphereGeometry(.72,64,32),glassMat); glass.scale.set(.82,1.15,.82); glass.position.y=.75; lamp.add(glass);
+    const fc=new THREE.CatmullRomCurve3([new THREE.Vector3(-.35,.55,.04),new THREE.Vector3(-.22,.72,.04),new THREE.Vector3(-.08,.55,.04),new THREE.Vector3(.08,.72,.04),new THREE.Vector3(.22,.55,.04),new THREE.Vector3(.35,.72,.04)]);
+    const filament=new THREE.Mesh(new THREE.TubeGeometry(fc,64,.025,12,false),std(0xffb347,.1,.12,0xffb347,1.2)); lamp.add(filament);
+    const bulbLight=new THREE.PointLight(0xffc66b,.1,9); bulbLight.position.set(6.4,.8,0); scene.add(bulbLight);
+
+    // Supporti
+    const standMat=std(0x52677f,.75,.2);
+    [-4.8,0,4.8].forEach(x=>{const p=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1.25,24),standMat);p.position.set(x,-.55,-.45);circuit.add(p);const cl=new THREE.Mesh(new THREE.BoxGeometry(.55,.12,.12),standMat);cl.position.set(x,.10,-.2);circuit.add(cl)});
+
+    // Elettroni
+    const electrons=[]; const eGeo=new THREE.SphereGeometry(.105,24,16);
+    for(let i=0;i<34;i++){
+      const m=new THREE.MeshStandardMaterial({color:0x42c7ff,roughness:.18,metalness:.15,emissive:0x117ad6,emissiveIntensity:.9});
+      const e=new THREE.Mesh(eGeo,m); e.userData.phase=i/34; e.position.set(-4.35+i*(8.7/33),wireY,0); electrons.push(e); electronGroup.add(e);
+      e.add(new THREE.Mesh(new THREE.SphereGeometry(.16,24,16),basic(0x42c7ff,.08)));
+    }
+
+    // Energia e campi
+    const energyParticles=[]; const pGeo=new THREE.SphereGeometry(.065,18,12);
+    for(let i=0;i<150;i++){const p=new THREE.Mesh(pGeo,basic(0xffb347,.82));p.userData.phase=i/150;p.userData.radius=.62+Math.random()*.7;p.userData.side=Math.random()*Math.PI*2;energyParticles.push(p);energyGroup.add(p)}
+
+    const energyLines=[];
+    function addEnergyLine(radius,phase,color){
+      const pts=[]; for(let i=0;i<=220;i++){const t=i/220,x=-4.65+t*9.3,a=t*Math.PI*8+phase;pts.push(new THREE.Vector3(x,wireY+Math.sin(a)*radius*.35,Math.cos(a)*radius))}
+      const mesh=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),220,.018,8,false),basic(color,.42)); energyLines.push(mesh); energyGroup.add(mesh);
+    }
+    for(let i=0;i<10;i++)addEnergyLine(.58+i*.075,i*.75,i%2?0xff7b1a:0xffc66b);
+
+    const loops=[];
+    for(let x=-3.8;x<=3.8;x+=1.25){const tor=new THREE.Mesh(new THREE.TorusGeometry(.82,.012,10,96),basic(0x42c7ff,.36));tor.rotation.y=Math.PI/2;tor.position.set(x,wireY,0);loops.push(tor);fieldsGroup.add(tor)}
+
+    const eLines=[];
+    function addArc(sign,z,scale){
+      const pts=[]; for(let i=0;i<=120;i++){const t=i/120,x=-4.6+t*9.2,y=wireY+sign*Math.sin(t*Math.PI)*1.4*scale;pts.push(new THREE.Vector3(x,y,z+Math.sin(t*Math.PI*2)*.18))}
+      const mesh=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),120,.014,8,false),basic(0xffb347,.50)); eLines.push(mesh); fieldsGroup.add(mesh);
+    }
+    [-.8,-.4,0,.4,.8].forEach((z,i)=>{addArc(1,z,.75+i*.04);addArc(-1,z,.55+i*.035)});
+
+    const arrows=[];
+    for(let i=0;i<22;i++){const cone=new THREE.Mesh(new THREE.ConeGeometry(.08,.22,20),basic(0xffb347,.78));cone.userData.phase=i/22;arrows.push(cone);energyGroup.add(cone)}
+
+    const gapMarker=new THREE.Group(); gapMarker.position.set(4.85,wireY,0);
+    const ga=new THREE.Mesh(new THREE.BoxGeometry(.08,.95,.08),std(0xff4b5c,.2,.18,0xff4b5c,1.2)); ga.rotation.z=Math.PI/5;
+    const gb=ga.clone(); gb.rotation.z=-Math.PI/5; gapMarker.add(ga,gb); gapMarker.visible=false; scene.add(gapMarker);
+
+    // Etichette proiettate: visibili solo quando c'è abbastanza spazio
+    const labels=[
+      ['labelBattery',new THREE.Vector3(-6.55,2.65,0)],['labelWire',new THREE.Vector3(-1.2,1.35,0)],['labelElectrons',new THREE.Vector3(-1.9,.05,0)],
+      ['labelEnergy',new THREE.Vector3(.9,2.25,0)],['labelMagnetic',new THREE.Vector3(3.05,-.48,.8)],['labelLamp',new THREE.Vector3(6.7,2.25,0)]
+    ];
+    function projectLabels(){
+      for(const [id,pos] of labels){
+        const el=document.getElementById(id); const v=pos.clone().project(camera);
+        el.style.left=((v.x*.5+.5)*innerWidth)+'px'; el.style.top=((-v.y*.5+.5)*innerHeight)+'px';
+        el.style.display=(v.z<1&&v.z>-1&&innerWidth>1080&&innerHeight>760)?'block':'none';
+      }
+    }
+
+    const lessonStep=document.getElementById('lessonStep'),lessonMini=document.getElementById('lessonMini'),lessonTitle=document.getElementById('lessonTitle'),lessonText=document.getElementById('lessonText');
+    const voltage=document.getElementById('voltage'),resistance=document.getElementById('resistance'),voltageOut=document.getElementById('voltageOut'),resistanceOut=document.getElementById('resistanceOut'),cameraMode=document.getElementById('cameraMode'),cameraOut=document.getElementById('cameraOut'),toast=document.getElementById('toast');
+    let toastTimer=null;
+    function showToast(t){toast.textContent=t;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1500)}
+    function setLesson(step,mini,title,html){lessonStep.textContent=step;lessonMini.textContent=mini;lessonTitle.textContent=title;lessonText.innerHTML=html}
+    function intensity(){return state.circuitOpen?0:(state.running?Math.max(0,state.voltage/state.resistance):0)}
+    function refreshLesson(){
+      const I=intensity();
+      if(state.circuitOpen){setLesson('Fase 4','Circuito aperto','Il fenomeno si spezza','Hai aperto il circuito. Il campo non resta organizzato e la lampadina non riceve energia. <strong>Non basta avere una batteria: serve un percorso chiuso.</strong>');return}
+      if(!state.running){setLesson('Fase 0','Sistema spento','Materia pronta, energia assente','Il filo contiene già elettroni liberi, ma senza campo elettrico non c’è corrente organizzata. La batteria è lì, la lampadina è lì, ma il fenomeno non è ancora nato.');return}
+      if(!state.fieldsVisible){setLesson('Fase 3','Campo nascosto','Ora il modello “tubo” inganna','Hai nascosto i campi. Restano filo ed elettroni, ma manca l’attore principale: <em>l’energia non è una pallina nel filo</em>, è una dinamica del campo elettromagnetico.');return}
+      if(I<.8)setLesson('Fase 1','Corrente debole','Campo presente, lampadina fioca','La tensione è bassa oppure la resistenza è alta. Gli elettroni avanzano piano e il campo attorno al filo è debole.');
+      else if(I<1.65)setLesson('Fase 2','Corrente stabile','Elettroni lenti, energia veloce','Gli elettroni blu si muovono nel filo, ma lentamente. Il bagliore arancione corre attorno al conduttore: <strong>lì devi immaginare il flusso di energia.</strong>');
+      else setLesson('Fase 3','Corrente intensa','Il campo diventa protagonista','Aumentando la tensione o abbassando la resistenza, il campo si rafforza. La lampadina brilla di più perché riceve più energia dal campo che il filo guida.');
+    }
+
+    document.getElementById('startBtn').onclick=()=>{state.running=true;state.circuitOpen=false;gapMarker.visible=false;refreshLesson();showToast('Corrente avviata')};
+    document.getElementById('stopBtn').onclick=()=>{state.running=false;refreshLesson();showToast('Corrente fermata')};
+    document.getElementById('fieldBtn').onclick=()=>{state.fieldsVisible=!state.fieldsVisible;fieldsGroup.visible=state.fieldsVisible;energyGroup.visible=state.fieldsVisible;refreshLesson();showToast(state.fieldsVisible?'Campi visibili':'Campi nascosti')};
+    document.getElementById('breakBtn').onclick=()=>{state.circuitOpen=!state.circuitOpen;gapMarker.visible=state.circuitOpen;refreshLesson();showToast(state.circuitOpen?'Circuito aperto':'Circuito chiuso')};
+    voltage.oninput=()=>{state.voltage=Number(voltage.value);voltageOut.textContent=state.voltage.toFixed(1)+' V';refreshLesson()};
+    resistance.oninput=()=>{state.resistance=Number(resistance.value);resistanceOut.textContent=state.resistance.toFixed(1)+' Ω';refreshLesson()};
+    cameraMode.oninput=()=>{state.autoCamera=Number(cameraMode.value)===1;cameraOut.textContent=state.autoCamera?'attiva':'manuale';showToast(state.autoCamera?'Camera automatica':'Camera manuale')};
+
+    const clock=new THREE.Clock();
+    function animate(){
+      requestAnimationFrame(animate);
+      const dt=Math.min(clock.getDelta(),.033); state.time+=dt;
+      const I=intensity(), norm=Math.min(I/2.4,1.25), active=I>.02;
+
+      if(state.autoCamera){
+        const a=state.time*.12, r=13.2;
+        camera.position.x+=(Math.sin(a)*r-camera.position.x)*.015;
+        camera.position.z+=(Math.cos(a)*r-camera.position.z)*.015;
+        camera.position.y+=(4.7+Math.sin(a*1.7)*.28-camera.position.y)*.015;
+      }
+      controls.update();
+
+      electrons.forEach((e,i)=>{
+        const drift=active?state.time*.045*Math.max(norm,.15):0;
+        const x=-4.35+(((e.userData.phase+drift)%1)*8.7);
+        e.position.set(x,wireY+Math.sin(state.time*2.2+i)*.012,Math.sin(i*1.7)*.045);
+        e.material.emissiveIntensity=active?.9+norm*.75:.22;
+        e.scale.setScalar(active?1+Math.sin(state.time*5+i)*.05:.88);
+      });
+
+      energyParticles.forEach((p,i)=>{
+        const speed=active?.55+norm*1.9:.03,t=(p.userData.phase+state.time*speed)%1,x=-4.65+t*9.3,a=t*Math.PI*10+p.userData.side+state.time*1.7,r=p.userData.radius*(.85+norm*.35);
+        p.position.set(x,wireY+Math.sin(a)*r*.33,Math.cos(a)*r);
+        p.scale.setScalar(active?.8+norm*.75+Math.sin(state.time*8+i)*.18:.18);
+        p.material.opacity=active?.30+norm*.55:.035;
+      });
+      energyLines.forEach((l,i)=>{l.rotation.x=Math.sin(state.time*.7+i)*.04;l.material.opacity=state.fieldsVisible?(active?.16+norm*.34:.04):0;l.scale.setScalar(1+norm*.05)});
+      arrows.forEach((c,i)=>{const t=(c.userData.phase+state.time*(active?.62+norm*1.6:.02))%1,x=-4.65+t*9.3,a=t*Math.PI*10+i*.7;c.position.set(x,wireY+Math.sin(a)*.34,Math.cos(a)*1.12);c.rotation.z=-Math.PI/2;c.rotation.x=a;c.material.opacity=active?.32+norm*.45:.02;c.scale.setScalar(active?.8+norm*.55:.18)});
+      loops.forEach((l,i)=>{const pulse=1+Math.sin(state.time*2.4+i)*.035;l.scale.setScalar(active?pulse*(.78+norm*.34):.62);l.material.opacity=state.fieldsVisible?(active?.16+norm*.34:.05):0;l.rotation.x+=dt*(active?.18:.04)});
+      eLines.forEach((l,i)=>{l.material.opacity=state.fieldsVisible?(active?.16+norm*.34:.04):0;l.scale.y=1+Math.sin(state.time*1.5+i)*.025*norm});
+
+      const lampPower=Math.min(I/2.4,1.15);
+      bulbLight.intensity=lampPower*7.5; bulbLight.distance=7+lampPower*7;
+      filament.material.emissiveIntensity=.25+lampPower*4.2; glassMat.emissiveIntensity=.03+lampPower*.8;
+      goldLight.intensity=1.2+lampPower*3.4; bloom.strength=.48+lampPower*.82; rim.intensity=2.4+norm*2.4;
+      wireMat.emissiveIntensity=active?.08+norm*.35:.08; core.material.opacity=active?.56+norm*.18:.38;
+      gapMarker.scale.setScalar(1+Math.sin(state.time*8)*.08);
+
+      projectLabels();
+      composer.render();
+    }
+
+    addEventListener('resize',()=>{
+      camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); bloom.setSize(innerWidth,innerHeight); projectLabels();
+    });
+
+    refreshLesson();
+    animate();
+  </script>
+</body>
+</html>
 
